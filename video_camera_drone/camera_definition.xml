@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+Camera Definition File for SimCam Virtual Camera V2
+Theo chuẩn MAVLink Camera Definition File Format
+https://mavlink.io/en/services/camera_def.html
+-->
+<mavlinkcamera>
+    <definition version="1">
+        <model>Virtual Camera V2</model>
+        <vendor>SimCam</vendor>
+    </definition>
+    
+    <!-- Parameters định nghĩa các settings của camera -->
+    <parameters>
+        <!-- Camera Mode -->
+        <parameter name="CAM_MODE" type="uint32" default="0">
+            <description>Camera Mode</description>
+            <options>
+                <option name="Photo" value="0" />
+                <option name="Video" value="1" />
+            </options>
+        </parameter>
+        
+        <!-- Photo Resolution -->
+        <parameter name="CAM_PHOTORES" type="uint32" default="0">
+            <description>Photo Resolution</description>
+            <options>
+                <option name="1920x1080 (2MP)" value="0" />
+                <option name="2560x1440 (3.7MP)" value="1" />
+                <option name="3840x2160 (4K 8MP)" value="2" />
+                <option name="5184x3888 (20MP)" value="3" />
+            </options>
+        </parameter>
+        
+        <!-- Video Resolution -->
+        <parameter name="CAM_VIDRES" type="uint32" default="0">
+            <description>Video Resolution</description>
+            <options>
+                <option name="1280x720 30fps" value="0" />
+                <option name="1920x1080 30fps" value="1" />
+                <option name="1920x1080 60fps" value="2" />
+                <option name="3840x2160 30fps (4K)" value="3" />
+                <option name="3840x2160 60fps (4K)" value="4" />
+            </options>
+        </parameter>
+        
+        <!-- White Balance -->
+        <parameter name="CAM_WBMODE" type="uint32" default="0">
+            <description>White Balance Mode</description>
+            <options>
+                <option name="Auto" value="0" />
+                <option name="Incandescent" value="1" />
+                <option name="Fluorescent" value="2" />
+                <option name="Daylight" value="3" />
+                <option name="Cloudy" value="4" />
+                <option name="Shade" value="5" />
+                <option name="Sunset" value="6" />
+            </options>
+        </parameter>
+        
+        <!-- Exposure Mode -->
+        <parameter name="CAM_EXPMODE" type="uint32" default="0">
+            <description>Exposure Mode</description>
+            <options>
+                <option name="Auto" value="0" />
+                <option name="Manual" value="1" />
+                <option name="Shutter Priority" value="2" />
+                <option name="Aperture Priority" value="3" />
+                <option name="Program" value="4" />
+            </options>
+        </parameter>
+        
+        <!-- ISO -->
+        <parameter name="CAM_ISO" type="uint32" default="0">
+            <description>ISO Sensitivity</description>
+            <options>
+                <option name="Auto" value="0" />
+                <option name="100" value="100" />
+                <option name="200" value="200" />
+                <option name="400" value="400" />
+                <option name="800" value="800" />
+                <option name="1600" value="1600" />
+                <option name="3200" value="3200" />
+                <option name="6400" value="6400" />
+            </options>
+        </parameter>
+        
+        <!-- Shutter Speed -->
+        <parameter name="CAM_SHUTTERSPD" type="float" default="0.001">
+            <description>Shutter Speed (seconds)</description>
+            <options>
+                <option name="1/8000" value="0.000125" />
+                <option name="1/4000" value="0.00025" />
+                <option name="1/2000" value="0.0005" />
+                <option name="1/1000" value="0.001" />
+                <option name="1/500" value="0.002" />
+                <option name="1/250" value="0.004" />
+                <option name="1/125" value="0.008" />
+                <option name="1/60" value="0.0167" />
+                <option name="1/30" value="0.0333" />
+                <option name="1/15" value="0.0667" />
+                <option name="1/8" value="0.125" />
+            </options>
+        </parameter>
+        
+        <!-- Aperture -->
+        <parameter name="CAM_APERTURE" type="float" default="2.8">
+            <description>Aperture (f-stop)</description>
+            <options>
+                <option name="f/1.8" value="1.8" />
+                <option name="f/2.0" value="2.0" />
+                <option name="f/2.8" value="2.8" />
+                <option name="f/4.0" value="4.0" />
+                <option name="f/5.6" value="5.6" />
+                <option name="f/8.0" value="8.0" />
+                <option name="f/11" value="11.0" />
+                <option name="f/16" value="16.0" />
+            </options>
+        </parameter>
+        
+        <!-- EV Compensation -->
+        <parameter name="CAM_EV" type="float" default="0.0" min="-3.0" max="3.0" step="0.3">
+            <description>Exposure Compensation</description>
+        </parameter>
+        
+        <!-- Video Format -->
+        <parameter name="CAM_VIDFORMAT" type="uint32" default="0">
+            <description>Video Codec</description>
+            <options>
+                <option name="H.264" value="0" />
+                <option name="H.265 (HEVC)" value="1" />
+                <option name="MJPEG" value="2" />
+            </options>
+        </parameter>
+        
+        <!-- Video Bitrate -->
+        <parameter name="CAM_VIDBITRATE" type="uint32" default="2">
+            <description>Video Bitrate</description>
+            <options>
+                <option name="Low (5 Mbps)" value="0" />
+                <option name="Medium (10 Mbps)" value="1" />
+                <option name="High (20 Mbps)" value="2" />
+                <option name="Ultra (40 Mbps)" value="3" />
+            </options>
+        </parameter>
+        
+        <!-- Color Mode -->
+        <parameter name="CAM_COLORMODE" type="uint32" default="0">
+            <description>Color Mode</description>
+            <options>
+                <option name="Normal" value="0" />
+                <option name="Vivid" value="1" />
+                <option name="Neutral" value="2" />
+                <option name="Black &amp; White" value="3" />
+                <option name="Sepia" value="4" />
+            </options>
+        </parameter>
+        
+        <!-- Metering Mode -->
+        <parameter name="CAM_METERING" type="uint32" default="0">
+            <description>Metering Mode</description>
+            <options>
+                <option name="Center-weighted" value="0" />
+                <option name="Spot" value="1" />
+                <option name="Matrix" value="2" />
+                <option name="Average" value="3" />
+            </options>
+        </parameter>
+        
+        <!-- Image Format -->
+        <parameter name="CAM_PHOTOFMT" type="uint32" default="0">
+            <description>Photo Format</description>
+            <options>
+                <option name="JPEG" value="0" />
+                <option name="RAW (DNG)" value="1" />
+                <option name="JPEG + RAW" value="2" />
+            </options>
+        </parameter>
+        
+        <!-- JPEG Quality -->
+        <parameter name="CAM_JPEGQUAL" type="uint32" default="2">
+            <description>JPEG Quality</description>
+            <options>
+                <option name="Low" value="0" />
+                <option name="Medium" value="1" />
+                <option name="High" value="2" />
+                <option name="Super Fine" value="3" />
+            </options>
+        </parameter>
+        
+        <!-- Anti-flicker -->
+        <parameter name="CAM_ANTIFLICKER" type="uint32" default="0">
+            <description>Anti-flicker</description>
+            <options>
+                <option name="Auto" value="0" />
+                <option name="50Hz" value="1" />
+                <option name="60Hz" value="2" />
+                <option name="Off" value="3" />
+            </options>
+        </parameter>
+        
+        <!-- Zoom -->
+        <parameter name="CAM_ZOOM" type="float" default="1.0" min="1.0" max="10.0" step="0.1">
+            <description>Digital Zoom Level</description>
+        </parameter>
+        
+        <!-- Focus Mode -->
+        <parameter name="CAM_FOCUSMODE" type="uint32" default="0">
+            <description>Focus Mode</description>
+            <options>
+                <option name="Auto Focus" value="0" />
+                <option name="Manual Focus" value="1" />
+                <option name="Continuous AF" value="2" />
+                <option name="Infinity" value="3" />
+                <option name="Macro" value="4" />
+            </options>
+        </parameter>
+        
+        <!-- Focus Distance (for manual focus) -->
+        <parameter name="CAM_FOCUSDIST" type="float" default="1.0" min="0.1" max="100.0" step="0.1">
+            <description>Focus Distance (meters)</description>
+        </parameter>
+        
+        <!-- Image Stabilization -->
+        <parameter name="CAM_STABILIZATION" type="uint32" default="1">
+            <description>Image Stabilization</description>
+            <options>
+                <option name="Off" value="0" />
+                <option name="On" value="1" />
+            </options>
+        </parameter>
+        
+        <!-- Time Lapse Interval -->
+        <parameter name="CAM_TIMELAPSE" type="float" default="0" min="0" max="60" step="1">
+            <description>Time Lapse Interval (seconds, 0=off)</description>
+        </parameter>
+        
+        <!-- HDR Mode -->
+        <parameter name="CAM_HDR" type="uint32" default="0">
+            <description>HDR Mode</description>
+            <options>
+                <option name="Off" value="0" />
+                <option name="On" value="1" />
+                <option name="Auto" value="2" />
+            </options>
+        </parameter>
+        
+    </parameters>
+    
+    <!-- Localization (Đa ngôn ngữ) -->
+    <localization>
+        <locale name="en_US">
+            <strings original="Camera Mode" translated="Camera Mode" />
+            <strings original="Photo" translated="Photo" />
+            <strings original="Video" translated="Video" />
+            <strings original="Photo Resolution" translated="Photo Resolution" />
+            <strings original="Video Resolution" translated="Video Resolution" />
+            <strings original="White Balance Mode" translated="White Balance Mode" />
+            <strings original="Exposure Mode" translated="Exposure Mode" />
+            <strings original="Auto" translated="Auto" />
+        </locale>
+        
+        <locale name="vi_VN">
+            <strings original="Camera Mode" translated="Chế độ Camera" />
+            <strings original="Photo" translated="Chụp ảnh" />
+            <strings original="Video" translated="Quay video" />
+            <strings original="Photo Resolution" translated="Độ phân giải ảnh" />
+            <strings original="Video Resolution" translated="Độ phân giải video" />
+            <strings original="White Balance Mode" translated="Cân bằng trắng" />
+            <strings original="Exposure Mode" translated="Chế độ phơi sáng" />
+            <strings original="ISO Sensitivity" translated="Độ nhạy sáng ISO" />
+            <strings original="Shutter Speed" translated="Tốc độ màn trập" />
+            <strings original="Aperture" translated="Khẩu độ" />
+            <strings original="Exposure Compensation" translated="Bù trừ phơi sáng" />
+            <strings original="Video Codec" translated="Codec video" />
+            <strings original="Video Bitrate" translated="Bitrate video" />
+            <strings original="Color Mode" translated="Chế độ màu" />
+            <strings original="Metering Mode" translated="Chế độ đo sáng" />
+            <strings original="Photo Format" translated="Định dạng ảnh" />
+            <strings original="JPEG Quality" translated="Chất lượng JPEG" />
+            <strings original="Anti-flicker" translated="Chống nhấp nháy" />
+            <strings original="Digital Zoom Level" translated="Mức zoom số" />
+            <strings original="Focus Mode" translated="Chế độ lấy nét" />
+            <strings original="Focus Distance" translated="Khoảng cách lấy nét" />
+            <strings original="Image Stabilization" translated="Chống rung" />
+            <strings original="Time Lapse Interval" translated="Khoảng cách chụp liên tiếp" />
+            <strings original="HDR Mode" translated="Chế độ HDR" />
+            <strings original="Auto" translated="Tự động" />
+            <strings original="Manual" translated="Thủ công" />
+            <strings original="Off" translated="Tắt" />
+            <strings original="On" translated="Bật" />
+            <strings original="Low" translated="Thấp" />
+            <strings original="Medium" translated="Trung bình" />
+            <strings original="High" translated="Cao" />
+            <strings original="Normal" translated="Bình thường" />
+            <strings original="Vivid" translated="Sống động" />
+            <strings original="Neutral" translated="Trung tính" />
+        </locale>
+    </localization>
+    
+</mavlinkcamera>
