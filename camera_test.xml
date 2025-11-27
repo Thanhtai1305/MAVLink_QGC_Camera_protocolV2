@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<mavlinkcamera>
+    <definition version="7">
+        <model>T100</model>
+        <vendor>Foo Industries</vendor>
+    </definition>
+    
+    <capabilities>
+        <video_stream>false</video_stream>
+        <photo_capture>true</photo_capture>
+        <video_capture>true</video_capture>
+        <param_change>true</param_change>
+    </capabilities>
+
+    <parameters>
+        <parameter name="CAM_MODE" type="uint32" default="0" control="1">
+            <description>Camera Mode</description>
+            <updates>
+                <update>CAM_SHUTTERSPD</update>
+                <update>CAM_ISO</update>
+                <update>CAM_VIDRES</update>
+            </updates>
+            <options>
+                <option name="Photo" value="0">
+                    <exclusions>
+                        <exclude>CAM_VIDRES</exclude>
+                        <exclude>CAM_VIDFMT</exclude>
+                    </exclusions>
+                </option>
+                <option name="Video" value="1">
+                    <exclusions>
+                        <exclude>CAM_PHOTOFMT</exclude>
+                        <exclude>CAM_PHOTOQUAL</exclude>
+                        <exclude>CAM_COLORMODE</exclude>
+                    </exclusions>
+                </option>
+            </options>
+        </parameter>
+        
+        <parameter name="CAM_ISO" type="uint32" default="100">
+            <description>ISO</description>
+            <options>
+                <option name="100" value="100" />
+                <option name="200" value="200" />
+                <option name="400" value="400" />
+            </options>
+        </parameter>
+
+        <parameter name="CAM_SHUTTERSPD" type="float" default="0.016666">
+            <description>Shutter Speed</description>
+            <options>
+                <option name="1/60" value="0.016666" />
+                <option name="1/125" value="0.008" />
+                <option name="1/250" value="0.004" />
+            </options>
+        </parameter>
+    </parameters>
+</mavlinkcamera>
