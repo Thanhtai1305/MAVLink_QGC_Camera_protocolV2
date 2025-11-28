@@ -35,11 +35,14 @@ find_package(Threads REQUIRED)
 # ================================================================
 set(MAVLINK_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/c_library_v2")
 
-if(NOT EXISTS "${MAVLINK_INCLUDE_DIR}/common/mavlink.h")
+# Kiểm tra ardupilotmega dialect
+if(EXISTS "${MAVLINK_INCLUDE_DIR}/ardupilotmega/mavlink.h")
+    message(STATUS "✅ ArduPilot MAVLink dialect found")
+else()
     message(FATAL_ERROR "
-        ❌ Không tìm thấy file mavlink.h trong thư mục c_library_v2!
-        Kiểm tra lại cấu trúc:
-        c_library_v2/common/mavlink.h
+        ❌ ardupilotmega/mavlink.h not found!
+        Cần có cấu trúc:
+        c_library_v2/ardupilotmega/mavlink.h
     ")
 endif()
 

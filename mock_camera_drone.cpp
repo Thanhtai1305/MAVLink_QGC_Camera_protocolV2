@@ -10,12 +10,45 @@
 #include <atomic>
 #include <mutex>
 #include <sstream>
-#include <chrono>  // ← THÊM ĐỂ ĐO PERFORMANCE
+#include <chrono>
+#include <cmath>    // ← THÊM CHO M_PI, sin, cos, sqrt, atan2
 #include <gst/gst.h>
 #include <gst/rtsp-server/rtsp-server.h>
-#include <gst/app/gstappsink.h>  // ← THÊM CHO APPSINK
-#include <opencv2/opencv.hpp>     // ← THÊM OPENCV
-#include "c_library_v2/common/mavlink.h"
+#include <gst/app/gstappsink.h>
+#include <opencv2/opencv.hpp>
+
+// ← THAY THẾ: Include ArduPilot dialect
+// Nếu không có, dùng common và define thủ công
+#include "c_library_v2/ardupilotmega/mavlink.h"
+//#include "c_library_v2/common/mavlink.h"
+
+// Define CAMERA_FEEDBACK message ID (nếu thiếu)
+// #ifndef MAVLINK_MSG_ID_CAMERA_FEEDBACK
+// #define MAVLINK_MSG_ID_CAMERA_FEEDBACK 180
+
+// // Struct cho CAMERA_FEEDBACK (parse thủ công)
+// typedef struct __mavlink_camera_feedback_t {
+//     uint64_t time_usec;
+//     int32_t lat;
+//     int32_t lng;
+//     float alt_msl;
+//     float alt_rel;
+//     float roll;
+//     float pitch;
+//     float yaw;
+//     float foc_len;
+//     uint16_t img_idx;
+//     uint8_t target_system;
+//     uint8_t cam_idx;
+//     uint8_t flags;
+//     uint16_t completed_captures;
+// } mavlink_camera_feedback_t;
+// #endif
+
+// Định nghĩa M_PI nếu chưa có
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 // === BẮT BUỘC: Buộc std::cout in ngay lập tức ===
 static const auto _force_cout_flush = []() {
@@ -28,6 +61,7 @@ static const auto _force_cout_flush = []() {
 #define QGC_IP "127.0.0.1"
 #define QGC_PORT 14550 
 #define MY_PORT 14540
+#define SITL_PORT 14560      // ← THÊM: Port cho SITL forward
 #define RTSP_PORT 8554
 
 // IDs
@@ -37,6 +71,8 @@ static const auto _force_cout_flush = []() {
 // Commands
 #define MAV_CMD_LEGACY_PHOTO 203 
 #define MAV_CMD_REQUEST_CAMERA_INFORMATION 521
+#define MAV_CMD_DO_SET_CAM_TRIGG_DIST 206
+#define MAV_CMD_DO_DIGICAM_CONTROL 203
 
 // =====================================================================
 // FORWARD DECLARATIONS (Khai báo trước các hàm)
@@ -44,6 +80,9 @@ static const auto _force_cout_flush = []() {
 void send_image_captured_with_pose();
 void send_camera_capture_status();
 void send_mavlink(mavlink_message_t* msg);
+void check_auto_capture();              // ← THÊM DÒNG NÀY
+void execute_capture(std::string reason);  // ← THÊM DÒNG NÀY
+void handle_socket_data(int fd, const char* tag);
 
 // =====================================================================
 // ← PHẦN MỚI: GLOBAL VARIABLES CHO CAPTURE PIPELINE
@@ -52,9 +91,17 @@ GstElement *capture_pipeline = nullptr;
 GstElement *appsink = nullptr;
 bool capture_ready = false;
 
+// ← THÊM: Biến cho auto capture
+std::atomic<bool> auto_capture_enabled(false);
+std::atomic<float> trigger_distance(0.0f);  // Khoảng cách giữa các lần chụp (mét)
+std::atomic<double> last_capture_lat(0.0);
+std::atomic<double> last_capture_lon(0.0);
+
 // Global state (giữ nguyên)
 int sock;
+int sitl_sock = -1;  // ← THÊM: Socket riêng cho SITL
 struct sockaddr_in qgcAddr;
+struct sockaddr_in sitlAddr;  // ← THÊM
 struct sockaddr_in myAddr;
 std::atomic<int> image_count(0);
 std::atomic<bool> video_recording(false);
@@ -64,6 +111,8 @@ std::atomic<double> current_lat{21.0077678};
 std::atomic<double> current_lon{105.8433921};
 std::atomic<double> current_alt{50.0};
 std::atomic<float> current_yaw{0.0f};
+std::atomic<bool> heartbeat_logged_qgc(false);
+std::atomic<bool> heartbeat_logged_sitl(false);
 
 uint32_t get_time_boot_ms() { 
     return (uint32_t)time(NULL) * 1000; 
@@ -341,30 +390,64 @@ void setup_udp() {
     qgcAddr.sin_family = AF_INET;
     qgcAddr.sin_addr.s_addr = inet_addr(QGC_IP);
     qgcAddr.sin_port = htons(QGC_PORT);
+    
+    // ← THÊM: Setup SITL socket
+    memset(&sitlAddr, 0, sizeof(sitlAddr));
+    sitlAddr.sin_family = AF_INET;
+    sitlAddr.sin_addr.s_addr = INADDR_ANY;
+    sitlAddr.sin_port = htons(SITL_PORT);
+
+    sitl_sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sitl_sock == -1) {
+        perror("Socket error (SITL)");
+    } else {
+        int sitl_flags = fcntl(sitl_sock, F_GETFL, 0);
+        fcntl(sitl_sock, F_SETFL, sitl_flags | O_NONBLOCK);
+
+        if (bind(sitl_sock, (struct sockaddr *)&sitlAddr, sizeof(sitlAddr)) == -1) {
+            perror("Bind error (SITL)");
+            close(sitl_sock);
+            sitl_sock = -1;
+        } else {
+            std::cout << "[SITL] Listening on UDP port " << SITL_PORT 
+                      << " for ArduPilot feedback\n";
+        }
+    }
    
     std::cout << "============================================================" << std::endl;
     std::cout << "   CAMERA PROTOCOL V2 + RTSP SIMULATOR (OPTIMIZED)" << std::endl;
     std::cout << "============================================================" << std::endl;
     std::cout << "   MAVLink Port: " << MY_PORT << " -> " << QGC_PORT << std::endl;
+    std::cout << "   SITL Port:    " << SITL_PORT << std::endl;
     std::cout << "   RTSP Port:    " << RTSP_PORT << std::endl;
     std::cout << "============================================================" << std::endl;
 }
 
 void send_heartbeat() {
     mavlink_message_t msg;
-    mavlink_msg_heartbeat_pack(SYS_ID, COMP_ID_CAMERA, &msg,
-                               MAV_TYPE_CAMERA, MAV_AUTOPILOT_INVALID,
-                               0, 0, MAV_STATE_ACTIVE);
+    
+    // ← QUAN TRỌNG: Set đúng type và autopilot cho ArduPilot
+    mavlink_msg_heartbeat_pack(
+        SYS_ID,                      // system_id = 1 (cùng với SITL)
+        COMP_ID_CAMERA,              // component_id = 100
+        &msg,
+        MAV_TYPE_CAMERA,             // type: CAMERA
+        MAV_AUTOPILOT_INVALID,       // autopilot: INVALID (vì là peripheral)
+        0,                           // base_mode
+        0,                           // custom_mode
+        MAV_STATE_ACTIVE             // system_status
+    );
+    
     send_mavlink(&msg);
 }
 
 void send_camera_information() {
     mavlink_message_t msg;
     
-    const char* uri = "http://192.168.15.60:8000/camera_definition.xml"; 
+    const char* uri = "http://192.168.1.100:8000/camera_definition.xml";  // ← Đổi IP thật
     
-    uint8_t v[32] = "SimCam";
-    uint8_t m[32] = "Virtual Camera V2";
+    uint8_t v[32] = "SimCam v1.0";
+    uint8_t m[32] = "ArduPilot Camera";
     
     uint32_t flags = CAMERA_CAP_FLAGS_CAPTURE_IMAGE | 
                      CAMERA_CAP_FLAGS_CAPTURE_VIDEO |
@@ -373,14 +456,25 @@ void send_camera_information() {
 
     mavlink_msg_camera_information_pack(
         SYS_ID, COMP_ID_CAMERA, &msg,
-        get_time_boot_ms(), v, m, 1, 50.0f, 10.0f, 10.0f, 1920, 1080, 0,
-        flags, 
-        1,
-        uri, 0, 0 
+        get_time_boot_ms(), 
+        v,                    // vendor_name
+        m,                    // model_name
+        1,                    // firmware_version
+        50.0f,                // focal_length
+        10.0f,                // sensor_size_h
+        10.0f,                // sensor_size_v
+        1920,                 // resolution_h
+        1080,                 // resolution_v
+        0,                    // lens_id
+        flags,                // flags
+        1,                    // cam_definition_version
+        uri,                  // cam_definition_uri
+        0,                    // gimbal_device_id
+        0                     // camera_device_id
     );
     send_mavlink(&msg);
     
-    std::cout << " [SEND] CAMERA_INFORMATION\n";
+    std::cout << " [SEND] CAMERA_INFORMATION (ArduPilot compatible)\n";
 }
 
 void send_camera_settings() {
@@ -417,10 +511,6 @@ void send_camera_capture_status() {
         0
     );
     send_mavlink(&msg);
-    
-    // ← LOG CHI TIẾT
-    std::cout << "[STATUS] 📊 CAPTURE_STATUS: images=" << current_count 
-              << ", video=" << (video_recording ? "ON" : "OFF") << "\n";
 }
 
 void send_storage_information() {
@@ -467,7 +557,10 @@ void send_ack(uint16_t command, uint8_t result = MAV_RESULT_ACCEPTED) {
 }
 
 void handle_command_long(mavlink_command_long_t& cmd) {
-    std::cout << "\n[RECV] Command: " << cmd.command << std::endl;
+    // ← THÊM LOG ĐỂ XEM NGUỒN GỬI
+    std::cout << "\n[RECV] Command: " << cmd.command 
+              << " | From: sysid=" << (int)cmd.target_system 
+              << ", compid=" << (int)cmd.target_component << std::endl;
     
     if (cmd.command == MAV_CMD_REQUEST_MESSAGE) {
         uint32_t msg_id = (uint32_t)cmd.param1;
@@ -559,14 +652,139 @@ void handle_command_long(mavlink_command_long_t& cmd) {
     }
 }
 
+void handle_socket_data(int fd, const char* tag) {
+    if (fd < 0) {
+        return;
+    }
+
+    uint8_t buf[MAVLINK_MAX_PACKET_LEN];
+    struct sockaddr_in src;
+    socklen_t len = sizeof(src);
+
+    while (true) {
+        len = sizeof(src);
+        ssize_t recsize = recvfrom(fd, buf, MAVLINK_MAX_PACKET_LEN, 0,
+                                   (struct sockaddr*)&src, &len);
+        if (recsize <= 0) {
+            break;
+        }
+
+        mavlink_message_t msg;
+        mavlink_status_t status;
+
+        for (int i = 0; i < recsize; ++i) {
+            if (mavlink_parse_char(MAVLINK_COMM_0, buf[i], &msg, &status)) {
+                bool is_heartbeat = msg.msgid == MAVLINK_MSG_ID_HEARTBEAT;
+                bool is_gpos = msg.msgid == MAVLINK_MSG_ID_GLOBAL_POSITION_INT;
+
+                if (is_heartbeat) {
+                    std::atomic<bool>* hb_flag = nullptr;
+                    if (strcmp(tag, "QGC") == 0) {
+                        hb_flag = &heartbeat_logged_qgc;
+                    } else if (strcmp(tag, "SITL") == 0) {
+                        hb_flag = &heartbeat_logged_sitl;
+                    }
+
+                    bool expected = false;
+                    if (!hb_flag || hb_flag->compare_exchange_strong(expected, true)) {
+                        mavlink_heartbeat_t hb;
+                        mavlink_msg_heartbeat_decode(&msg, &hb);
+                        std::cout << "[HB][" << tag << "] sysid=" << (int)msg.sysid
+                                  << ", compid=" << (int)msg.compid
+                                  << " | type=" << (int)hb.type
+                                  << ", autopilot=" << (int)hb.autopilot
+                                  << ", status=" << (int)hb.system_status << "\n";
+                    }
+                    continue;
+                }
+
+                if (msg.msgid == MAVLINK_MSG_ID_COMMAND_LONG) {
+                    mavlink_command_long_t cmd;
+                    mavlink_msg_command_long_decode(&msg, &cmd);
+
+                    std::cout << "\n[DEBUG][" << tag << "] Received from: "
+                              << "sysid=" << (int)msg.sysid 
+                              << ", compid=" << (int)msg.compid
+                              << " | Target: sysid=" << (int)cmd.target_system
+                              << ", compid=" << (int)cmd.target_component
+                              << " | Command: " << cmd.command << "\n";
+
+                    if ((cmd.target_system == SYS_ID || cmd.target_system == 0) &&
+                        (cmd.target_component == COMP_ID_CAMERA || cmd.target_component == 0)) {
+                        handle_command_long(cmd);
+                    }
+                }
+                else if (msg.msgid == MAVLINK_MSG_ID_CAMERA_TRIGGER) {
+                    std::cout << "\n[RECV][" << tag << "] CAMERA_TRIGGER from Mission Planner!\n";
+                    execute_capture("Mission Trigger");
+                }
+                else if (msg.msgid == 180 || msg.msgid == MAVLINK_MSG_ID_CAMERA_FEEDBACK) {
+                    std::cout << "\n[DEBUG][" << tag << "] ✅ DETECTED CAMERA_FEEDBACK (msgid=180)!\n";
+
+                    uint8_t* payload = (uint8_t*)msg.payload64;
+
+                    uint64_t time_usec;
+                    int32_t lat_int, lng_int;
+                    float alt_msl, alt_rel, roll, pitch, yaw, foc_len;
+                    uint16_t img_idx, completed_captures;
+                    uint8_t target_system, cam_idx, flags;
+
+                    memcpy(&time_usec,          payload + 0,  8);
+                    memcpy(&lat_int,            payload + 8,  4);
+                    memcpy(&lng_int,            payload + 12, 4);
+                    memcpy(&alt_msl,            payload + 16, 4);
+                    memcpy(&alt_rel,            payload + 20, 4);
+                    memcpy(&roll,               payload + 24, 4);
+                    memcpy(&pitch,              payload + 28, 4);
+                    memcpy(&yaw,                payload + 32, 4);
+                    memcpy(&foc_len,            payload + 36, 4);
+                    memcpy(&img_idx,            payload + 40, 2);
+                    memcpy(&target_system,      payload + 42, 1);
+                    memcpy(&cam_idx,            payload + 43, 1);
+                    memcpy(&flags,              payload + 44, 1);
+                    memcpy(&completed_captures, payload + 45, 2);
+
+                    double lat = lat_int / 1e7;
+                    double lon = lng_int / 1e7;
+                    float yaw_deg = yaw;
+
+                    std::cout << "\n╔══════════════════════════════════════════╗\n";
+                    std::cout << "║   📸 CAMERA_FEEDBACK TỪ ARDUPILOT!     ║\n";
+                    std::cout << "╚══════════════════════════════════════════╝\n";
+                    std::cout << "  Source: " << tag << "\n";
+                    std::cout << "  Image #" << img_idx << "\n";
+                    std::cout << "  GPS: " << std::fixed << std::setprecision(7)
+                              << lat << ", " << lon << "\n";
+                    std::cout << "  Alt rel: " << alt_rel << "m\n";
+                    std::cout << "  Yaw: " << yaw_deg << "°\n";
+                    std::cout << "  Time: " << time_usec << " μs\n\n";
+
+                    current_lat.store(lat);
+                    current_lon.store(lon);
+                    current_alt.store(alt_rel);
+                    current_yaw.store(yaw_deg * (M_PI / 180.0f));
+
+                    execute_capture("ArduPilot CAMERA_FEEDBACK");
+                }
+                else if (msg.msgid == MAVLINK_MSG_ID_GLOBAL_POSITION_INT) {
+                    mavlink_global_position_int_t pos;
+                    mavlink_msg_global_position_int_decode(&msg, &pos);
+                    
+                    current_lat.store(pos.lat / 1e7);
+                    current_lon.store(pos.lon / 1e7);
+                    current_alt.store(pos.relative_alt / 1000.0);
+                    current_yaw.store(pos.hdg / 100.0f * 3.14159f / 180.0f);
+                }
+            }
+        }
+    }
+}
+
 void status_loop() {
-    std::cout << "[THREAD STATUS] Status loop started!\n";
     while (running) {
         send_camera_capture_status();
-        std::cout << "[THREAD STATUS] CAPTURE_STATUS sent (image_count=" << image_count.load() << ")\n";
         sleep(1);
     }
-    std::cout << "[THREAD STATUS] Thread status_loop kết thúc!\n";
 }
 
 void heartbeat_loop() {
@@ -574,13 +792,11 @@ void heartbeat_loop() {
     while (running) {
         send_heartbeat();
         if (counter % 5 == 0) {
-            std::cout << "[THREAD HB] HEARTBEAT + BROADCAST sent (counter=" << counter << ")\n";
             send_camera_information();
         }
         counter++;
         sleep(1);
     }
-    std::cout << "[THREAD HB] Thread heartbeat_loop kết thúc!\n";
 }
 
 // =============================================================================
@@ -634,45 +850,13 @@ int main() {
     std::cout << std::string(60, '=') << "\n" << std::endl;
 
     // 6. Main loop
+// === THÊM DEBUG VÀO MAIN LOOP ===
+// Thay thế phần main loop (dòng 720-780) bằng code này:
+
+    // 6. Main loop
     while (running) {
-        uint8_t buf[MAVLINK_MAX_PACKET_LEN];
-        struct sockaddr_in src;
-        socklen_t len = sizeof(src);
-
-        ssize_t recsize = recvfrom(sock, buf, MAVLINK_MAX_PACKET_LEN, 0,
-                                   (struct sockaddr*)&src, &len);
-
-        if (recsize > 0) {
-            mavlink_message_t msg;
-            mavlink_status_t status;
-
-            for (int i = 0; i < recsize; ++i) {
-                if (mavlink_parse_char(MAVLINK_COMM_0, buf[i], &msg, &status)) {
-                    if (msg.msgid == MAVLINK_MSG_ID_COMMAND_LONG) {
-                        mavlink_command_long_t cmd;
-                        mavlink_msg_command_long_decode(&msg, &cmd);
-
-                        if ((cmd.target_system == SYS_ID || cmd.target_system == 0) &&
-                            (cmd.target_component == COMP_ID_CAMERA || cmd.target_component == 0)) {
-                            handle_command_long(cmd);
-                        }
-                    }
-                    else if (msg.msgid == MAVLINK_MSG_ID_CAMERA_TRIGGER) {
-                        std::cout << "\n[RECV] CAMERA_TRIGGER from Mission Planner!\n";
-                        execute_capture("Mission Trigger");
-                    }
-                    else if (msg.msgid == MAVLINK_MSG_ID_GLOBAL_POSITION_INT) {
-                        mavlink_global_position_int_t pos;
-                        mavlink_msg_global_position_int_decode(&msg, &pos);
-                        
-                        current_lat.store(pos.lat / 1e7);
-                        current_lon.store(pos.lon / 1e7);
-                        current_alt.store(pos.relative_alt / 1000.0);
-                        current_yaw.store(pos.hdg / 100.0f * 3.14159f / 180.0f);
-                    }
-                }
-            }
-        }
+        handle_socket_data(sock, "QGC");
+        handle_socket_data(sitl_sock, "SITL");
         usleep(5000);
     }
 
@@ -685,6 +869,9 @@ int main() {
     hb_thread.join();
     status_thread.join();
     close(sock);
+    if (sitl_sock >= 0) {
+        close(sitl_sock);
+    }
 
     return 0;
 }
