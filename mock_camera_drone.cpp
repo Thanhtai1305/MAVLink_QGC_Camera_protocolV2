@@ -307,9 +307,15 @@ void execute_capture(std::string reason) {
     
     // Gắn EXIF ASYNC (không block) - sau khi đã gửi message
     std::thread([filename, lat, lon, alt, yaw_deg]() {
+        // Xác định hướng GPS
+        std::string lat_ref = (lat >= 0) ? "N" : "S";
+        std::string lon_ref = (lon >= 0) ? "E" : "W";
+        
         std::string exif_cmd = "exiftool -q -overwrite_original "
-            "-GPSLatitude=\"" + std::to_string(lat) + "\" "
-            "-GPSLongitude=\"" + std::to_string(lon) + "\" "
+            "-GPSLatitudeRef=\"" + lat_ref + "\" "
+            "-GPSLatitude=\"" + std::to_string(std::abs(lat)) + "\" "
+            "-GPSLongitudeRef=\"" + lon_ref + "\" "
+            "-GPSLongitude=\"" + std::to_string(std::abs(lon)) + "\" "
             "-GPSAltitude=\"" + std::to_string(alt) + "\" "
             "-GPSImgDirection=\"" + std::to_string(yaw_deg) + "\" "
             "-XMP:FlightYawDegree=\"" + std::to_string(yaw_deg) + "\" "
@@ -321,6 +327,7 @@ void execute_capture(std::string reason) {
         } else {
             std::cout << "[EXIF] ✅ Đã geotag: " << filename 
                       << " | GPS: " << lat << ", " << lon 
+                      << " (" << lat_ref << "/" << lon_ref << ")"
                       << " | Yaw: " << yaw_deg << "°\n";
         }
     }).detach();
